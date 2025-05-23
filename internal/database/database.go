@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/diegoafg1009/auto-radar-auth-microservice/internal/repositories"
 	_ "github.com/joho/godotenv/autoload"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -14,32 +15,50 @@ import (
 
 type Service interface {
 	Health() map[string]string
+	GetUserRepository() repositories.User
 }
 
 type service struct {
-	db *mongo.Client
+	db   *mongo.Client
+	user repositories.User
 }
 
 var (
-	host = os.Getenv("BLUEPRINT_DB_HOST")
-	port = os.Getenv("BLUEPRINT_DB_PORT")
-	//database = os.Getenv("BLUEPRINT_DB_DATABASE")
+	host     = os.Getenv("MONGO_DB_HOST")
+	port     = os.Getenv("MONGO_DB_PORT")
+	username = os.Getenv("MONGO_DB_USERNAME")
+	password = os.Getenv("MONGO_DB_PASSWORD")
+	database = os.Getenv("MONGO_DB_DATABASE")
 )
 
 func New() Service {
-	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI(fmt.Sprintf("mongodb://%s:%s", host, port)))
+	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI(fmt.Sprintf("mongodb://%s:%s@%s:%s", username, password, host, port)))
 
 	if err != nil {
 		log.Fatal(err)
-
 	}
+	defer func() {
+		if err := client.Disconnect(context.Background()); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	if err := client.Ping(context.Background(), nil); err != nil {
+		log.Fatal("Database connection failed")
+	}
+
+	log.Println("Database connected successfully")
+
+	db := client.Database(database)
+
 	return &service{
-		db: client,
+		db:   db.Client(),
+		user: NewUserRepository(db),
 	}
 }
 
 func (s *service) Health() map[string]string {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	err := s.db.Ping(ctx, nil)
@@ -50,4 +69,8 @@ func (s *service) Health() map[string]string {
 	return map[string]string{
 		"message": "It's healthy",
 	}
+}
+
+func (s *service) GetUserRepository() repositories.User {
+	return s.user
 }

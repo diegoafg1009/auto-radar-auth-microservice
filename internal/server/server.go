@@ -42,6 +42,7 @@ func NewServer() *Server {
 }
 
 func (s *Server) ListenAndServe() error {
+	log.Println("Starting server on port", s.port)
 	return s.apiServer.ListenAndServe()
 }
 
